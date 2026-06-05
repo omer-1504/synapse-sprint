@@ -3,19 +3,19 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Target, Trophy, Flame, AlertCircle } from 'lucide-react';
+import { Target, Trophy, Flame, AlertCircle, Menu } from 'lucide-react';
 
 const ADJECTIVES = ['Alpha', 'Neuro', 'Synapse', 'Cortex', 'Quantum', 'Logic'];
 const NOUNS = ['Thinker', 'Sage', 'Solver', 'Dynamo', 'Brain', 'Vector'];
 
-// Desaturated, non-vibrant, non-radium, earthy/neutral colors (No blue, purple, red, or gradients)
+// Muted, desaturated, non-vibrant, non-radium colors matching the 2048 palette aesthetic
 const COLORS = [
   '#4E5E50', // Muted Forest/Sage
   '#A08C75', // Warm Sand/Taupe
   '#A3704C', // Terracotta/Clay
   '#5B6E7A', // Muted Slate/Steel
   '#8F754E', // Muted Ochre/Gold
-  '#4A4A4A', // Charcoal
+  '#5C5046', // Dark Brown
 ];
 
 export default function BrainGridGame() {
@@ -215,6 +215,22 @@ export default function BrainGridGame() {
 
   const isFinished = tiles.length > 0 && gameState.current_target > tiles.length;
 
+  // Track the high score locally
+  const bestScore = useMemo(() => {
+    let storedBest = 0;
+    try {
+      storedBest = Number(localStorage.getItem('synapse_best_score') || 0);
+    } catch (e) {}
+    const currentBest = Math.max(score, ...leaderboard.map(team => team.count * 10), 0);
+    if (currentBest > storedBest) {
+      try {
+        localStorage.setItem('synapse_best_score', currentBest);
+      } catch (e) {}
+      return currentBest;
+    }
+    return storedBest;
+  }, [score, leaderboard]);
+
   // Compile grid size grid columns class statically to ensure compilation
   const gridColsClass = {
     5: 'grid-cols-5',
@@ -226,60 +242,86 @@ export default function BrainGridGame() {
   }[Math.sqrt(tiles.length)] || 'grid-cols-10';
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center p-4 md:p-8 font-sans select-none">
+    <div className="min-h-screen bg-background text-[#776e65] flex flex-col items-center p-4 md:p-6 font-sans select-none selection:bg-transparent">
       
-      {/* Typographic Header */}
-      <header className="w-full max-w-6xl flex flex-col md:flex-row justify-between items-center gap-6 border-b border-foreground/10 pb-6 mb-8">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-4xl font-serif italic tracking-wide text-foreground font-black">
-            Synapse Sprint
+      {/* 2048-Style Top Row Header */}
+      <header className="w-full max-w-2xl flex justify-between items-center gap-4 mb-4">
+        <div className="flex items-center gap-3">
+          <Menu className="w-8 h-8 text-[#776e65] cursor-pointer" />
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-[#776e65]">
+            Synapse
           </h1>
-          <p className="text-xs font-mono uppercase tracking-wider text-foreground/60">
-            Node Identity: <span className="font-bold underline" style={{ color: user.color }}>{user.name}</span>
+        </div>
+
+        {/* 2048 scoring pill cards */}
+        <div className="flex gap-2">
+          {/* Target Pill */}
+          <div className="bg-[#bbada0] rounded px-3 py-1 text-center min-w-[70px]">
+            <div className="text-[9px] font-bold text-[#eee4da] uppercase tracking-wider">Target</div>
+            <div className="text-lg font-bold text-white">
+              {gameState.current_target <= tiles.length ? gameState.current_target : 'Done'}
+            </div>
+          </div>
+
+          {/* Score Pill */}
+          <div className="bg-[#bbada0] rounded px-3 py-1 text-center min-w-[70px]">
+            <div className="text-[9px] font-bold text-[#eee4da] uppercase tracking-wider">Score</div>
+            <div className="text-lg font-bold text-white">{score}</div>
+          </div>
+
+          {/* Best Pill */}
+          <div className="bg-[#bbada0] rounded px-3 py-1 text-center min-w-[70px]">
+            <div className="text-[9px] font-bold text-[#eee4da] uppercase tracking-wider">Best</div>
+            <div className="text-lg font-bold text-white">{bestScore}</div>
+          </div>
+        </div>
+      </header>
+
+      {/* Subheader and Controls Row */}
+      <div className="w-full max-w-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div>
+          <p className="text-sm font-medium text-[#776e65]/90">
+            Identify equations matching target. Grid size:
+          </p>
+          <p className="text-xs font-mono text-[#776e65]/70 mt-1">
+            Identity: <span className="font-bold underline" style={{ color: user.color }}>{user.name}</span>
           </p>
         </div>
 
-        {/* Global Target Banner */}
-        <div className="flex items-center gap-6 border border-foreground/10 px-6 py-3 bg-foreground/[0.02]">
-          <div className="flex items-center gap-2">
-            <Target className="w-4 h-4 text-foreground/75" />
-            <span className="text-[10px] font-mono tracking-widest text-foreground/60 uppercase">Target Objective:</span>
-          </div>
-          <div className="text-3xl font-serif italic text-foreground font-bold px-2">
-            {gameState.current_target <= tiles.length ? gameState.current_target : 'Finished'}
-          </div>
-        </div>
-
-        {/* Score & Select Layout */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 border border-foreground/10 px-4 py-2 bg-foreground/[0.01]">
-            <Flame className="w-4 h-4 text-foreground/70" />
-            <span className="text-xs font-mono text-foreground/80">Score: {score} pts</span>
-          </div>
-
-          <div className="flex items-center gap-2 border border-foreground/10 px-3 py-2 bg-foreground/[0.01]">
-            <span className="text-xs font-mono text-foreground/60 uppercase tracking-wide">Grid:</span>
+        <div className="flex items-center gap-3">
+          {/* Grid Size Select Dropdown */}
+          <div className="bg-[#8f7a66] text-white rounded font-bold px-3 py-2 text-xs flex items-center gap-2 cursor-pointer transition-colors duration-150 hover:bg-[#8f7a66]/90">
+            <span className="uppercase text-[9px] tracking-wider text-[#f9f6f2]/80">Grid:</span>
             <select
               value={gridSize}
               onChange={(e) => setGridSize(Number(e.target.value))}
               disabled={isFinished}
-              className="bg-transparent text-xs font-mono text-foreground focus:outline-none cursor-pointer border-none"
+              className="bg-transparent font-bold text-white focus:outline-none cursor-pointer border-none outline-none appearance-none pr-1"
             >
               {[5, 6, 7, 8, 9, 10].map(s => (
-                <option key={s} value={s} className="bg-background text-foreground">
+                <option key={s} value={s} className="bg-[#8f7a66] text-white">
                   {s}x{s}
                 </option>
               ))}
             </select>
           </div>
-        </div>
-      </header>
 
-      {/* Main Grid Viewport Arena */}
-      <main className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+          {/* New Game Button */}
+          <button
+            onClick={() => handleStartFreshGame(gridSize)}
+            disabled={isResetting}
+            className="bg-[#8f7a66] text-[#f9f6f2] rounded font-bold px-4 py-2 text-xs transition-colors duration-150 hover:bg-[#8f7a66]/90"
+          >
+            {isResetting ? 'Resetting...' : 'New Game'}
+          </button>
+        </div>
+      </div>
+
+      {/* Main Container: Board Grid and Side Panels */}
+      <div className="w-full max-w-2xl flex flex-col gap-6">
         
-        {/* Arena Grid Blocks */}
-        <div className="lg:col-span-3 border border-foreground/10 p-4 md:p-6 bg-foreground/[0.005]">
+        {/* 2048-style board grid container */}
+        <div className="w-full bg-[#bbada0] rounded-xl p-3">
           <div className={`grid ${gridColsClass} gap-2`}>
             {tiles.map((tile) => {
               const isError = errorFlash === tile.id;
@@ -292,24 +334,26 @@ export default function BrainGridGame() {
                   transition={{ duration: 0.3 }}
                   whileHover={{ scale: tile.owner_color ? 1 : 1.04 }}
                   whileTap={{ scale: 0.98 }}
-                  className="aspect-square w-full flex flex-col items-center justify-center border border-foreground/10 p-1 relative transition-all group overflow-hidden cursor-pointer"
+                  className="aspect-square w-full rounded flex flex-col items-center justify-center p-1 relative transition-all group overflow-hidden cursor-pointer"
                   style={{
-                    backgroundColor: tile.owner_color ? `${tile.owner_color}1a` : isError ? '#ffebeb' : 'transparent',
-                    borderColor: tile.owner_color ? tile.owner_color : isError ? '#ef4444' : 'currentColor',
-                    opacity: tile.owner_color ? 0.9 : 1,
+                    backgroundColor: tile.owner_color ? '#eee4da' : isError ? '#f2b179' : '#cdc1b4',
+                    border: tile.owner_color ? `2.5px solid ${tile.owner_color}` : 'none',
+                    opacity: tile.owner_color ? 0.95 : 1,
                   }}
                 >
                   {tile.owner_color ? (
-                    // Captured Block Appearance Layout
+                    // Captured Block Layout matching 2048 styling but indicating faction
                     <div className="flex flex-col items-center justify-center">
-                      <span className="text-sm font-serif font-black" style={{ color: tile.owner_color }}>{tile.value}</span>
-                      <span className="text-[9px] font-mono opacity-80 uppercase tracking-tighter truncate max-w-[55px]" style={{ color: tile.owner_color }}>
+                      <span className="text-base md:text-lg font-bold" style={{ color: tile.owner_color }}>
+                        {tile.value}
+                      </span>
+                      <span className="text-[8px] font-bold opacity-80 uppercase tracking-tighter truncate max-w-[50px]" style={{ color: tile.owner_color }}>
                         {tile.owner_name.split(' ')[0]}
                       </span>
                     </div>
                   ) : (
-                    // Active Expression Appearance Layout
-                    <span className="text-xs font-mono font-medium text-foreground/70 group-hover:text-foreground transition-colors">
+                    // Active Expression Layout
+                    <span className="text-[10px] md:text-xs font-bold text-[#776e65] group-hover:text-white transition-colors">
                       {tile.expression}
                     </span>
                   )}
@@ -319,75 +363,63 @@ export default function BrainGridGame() {
           </div>
         </div>
 
-        {/* Real-time Insights Side-Panel */}
-        <div className="flex flex-col gap-6 w-full">
-          {/* Faction Ranking List */}
-          <div className="border border-foreground/10 p-5 bg-foreground/[0.005]">
-            <h3 className="text-xs font-mono font-bold tracking-widest uppercase text-foreground/60 flex items-center gap-2 mb-4 border-b border-foreground/10 pb-2">
-              <Trophy className="w-4 h-4 text-foreground/70" /> Faction Ranking
-            </h3>
-            <div className="flex flex-col gap-2">
-              <AnimatePresence>
-                {leaderboard.map((team, index) => (
-                  <motion.div
-                    key={team.color}
-                    layout
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-center justify-between p-3 border-b border-foreground/5 bg-foreground/[0.01]"
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <span className="text-xs font-mono font-bold text-foreground/40">#{index + 1}</span>
-                      <div className="h-2.5 w-2.5 rounded-none" style={{ backgroundColor: team.color }} />
-                      <span className="text-xs font-serif font-semibold truncate" style={{ color: team.color }}>{team.name}</span>
-                    </div>
-                    <span className="text-xs font-mono px-2 py-0.5 border border-foreground/10 text-foreground/80">
-                      {team.count} cells
-                    </span>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-              {leaderboard.length === 0 && (
-                <div className="text-center py-6 border border-dashed border-foreground/10 text-xs text-foreground/40 italic flex flex-col items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-foreground/30" /> Search the equations and trace target #1!
+        {/* Faction Leaderboard list */}
+        <div className="bg-[#eee4da] rounded-xl p-4 border border-[#bbada0]/20">
+          <h3 className="text-xs font-bold tracking-widest uppercase text-[#776e65]/80 flex items-center gap-2 mb-3 border-b border-[#776e65]/10 pb-1.5">
+            <Trophy className="w-4 h-4 text-[#776e65]" /> Faction Rankings
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {leaderboard.map((team, index) => (
+              <motion.div
+                key={team.color}
+                layout
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center justify-between p-2.5 rounded bg-background border border-[#bbada0]/30"
+              >
+                <div className="flex items-center gap-2 overflow-hidden">
+                  <span className="text-[10px] font-bold text-[#776e65]/50">#{index + 1}</span>
+                  <div className="h-2.5 w-2.5 rounded-none" style={{ backgroundColor: team.color }} />
+                  <span className="text-[10px] font-bold truncate" style={{ color: team.color }}>
+                    {team.name.split(' ')[0]}
+                  </span>
                 </div>
-              )}
-            </div>
+                <span className="text-[10px] font-bold bg-[#bbada0] text-white px-1.5 py-0.5 rounded">
+                  {team.count}
+                </span>
+              </motion.div>
+            ))}
+            {leaderboard.length === 0 && (
+              <div className="col-span-4 text-center py-4 text-xs text-[#776e65]/50 italic">
+                Solve the formulas in sequential target order!
+              </div>
+            )}
           </div>
-
-          {/* Quick Manual Restart (For Convenience) */}
-          <button
-            onClick={() => handleStartFreshGame(gridSize)}
-            disabled={isResetting}
-            className="w-full border border-foreground hover:bg-foreground hover:text-background text-foreground font-mono uppercase tracking-wider py-3 text-xs transition-colors duration-200"
-          >
-            {isResetting ? 'Resetting Board...' : 'Manual Reset Board'}
-          </button>
         </div>
-      </main>
+      </div>
 
-      {/* Typographic Winner Modal Overlay */}
+      {/* 2048-style Game Over / Sprint Complete Modal Overlay */}
       {isFinished && (
-        <div className="fixed inset-0 bg-background/95 flex items-center justify-center z-50 p-4">
-          <div className="bg-background border border-foreground/20 max-w-md w-full p-8 text-center flex flex-col items-center gap-6">
-            <h2 className="text-4xl font-serif italic text-foreground tracking-wide font-black">
-              Sprint Complete
+        <div className="fixed inset-0 bg-[#faf8ef]/90 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#eee4da] rounded-xl border border-[#bbada0]/30 max-w-sm w-full p-8 text-center flex flex-col items-center gap-5">
+            <h2 className="text-4xl font-bold tracking-tight text-[#776e65]">
+              Sprint Over!
             </h2>
-            <div className="w-full h-px bg-foreground/10" />
-            <div className="flex flex-col gap-2">
-              <span className="text-xs font-mono uppercase tracking-widest text-foreground/50">Winner Faction</span>
-              <span className="text-3xl font-serif font-bold text-foreground" style={{ color: winner?.color }}>
+            <div className="w-full h-0.5 bg-[#bbada0]/30" />
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#776e65]/60">Winner Faction</span>
+              <span className="text-2xl font-bold" style={{ color: winner?.color }}>
                 {winner?.name || 'No Claims'}
               </span>
-              <span className="text-xs font-mono text-foreground/60 tracking-wider">
+              <span className="text-xs font-medium text-[#776e65]/80">
                 Claimed {winner?.count || 0} of {tiles.length} cells
               </span>
             </div>
             <button
               onClick={() => handleStartFreshGame(gridSize)}
               disabled={isResetting}
-              className="w-full border border-foreground hover:bg-foreground hover:text-background text-foreground font-mono uppercase tracking-wider py-4 text-xs transition-colors duration-200"
+              className="w-full bg-[#8f7a66] text-[#f9f6f2] rounded font-bold py-3.5 text-xs transition-colors duration-150 hover:bg-[#8f7a66]/90"
             >
               {isResetting ? 'Setting up next board...' : 'OK'}
             </button>
