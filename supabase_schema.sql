@@ -30,6 +30,12 @@ BEGIN
     -- Clear existing tiles if any and restart the identity sequence
     TRUNCATE TABLE public.brain_tiles RESTART IDENTITY;
     
+    -- Create a temporary table to hold sequential tiles
+    CREATE TEMP TABLE temp_tiles (
+        value int,
+        expression text
+    ) ON COMMIT DROP;
+    
     FOR v IN 1..100 LOOP
         -- Pick a random offset from 1 to 10
         r := floor(random() * 10 + 1)::int;
@@ -47,9 +53,13 @@ BEGIN
             END if;
         END IF;
         
-        INSERT INTO public.brain_tiles (value, expression)
+        INSERT INTO temp_tiles (value, expression)
         VALUES (v, expr);
     END LOOP;
+    
+    -- Insert into brain_tiles in a random order
+    INSERT INTO public.brain_tiles (value, expression)
+    SELECT value, expression FROM temp_tiles ORDER BY random();
 END $$;
 
 -- 4. Enable Realtime replication for these tables
