@@ -98,10 +98,13 @@ export default function BrainGridGame() {
       if (dbData) {
         logWs('SYSTEM', 'db_sync_ok', { tilesCount: dbData.tiles.length });
         
-        // If the database game is already finished (target > number of tiles), immediately start a fresh game
+        // If the database game is already finished or stale (target is 1 but has captures), immediately start a fresh game
+        const capturedCount = dbData.tiles.filter(t => t.owner_color !== null).length;
         const isDbGameFinished = dbData.tiles.length > 0 && dbData.game.current_target > dbData.tiles.length;
-        if (isDbGameFinished) {
-          logWs('SYSTEM', 'db_game_finished_auto_reset', { info: 'Last database game was completed, starting new game' });
+        const isDbGameStale = (dbData.game.current_target === 1 && capturedCount > 0);
+
+        if (isDbGameFinished || isDbGameStale) {
+          logWs('SYSTEM', 'db_game_finished_auto_reset', { info: 'Last database game was completed or stale, starting new game' });
           await handleStartFreshGame();
         }
         return;
@@ -359,7 +362,7 @@ export default function BrainGridGame() {
         });
       }
 
-      // Persist to Supabase DB in background (wipe and insert fresh tiles)
+      // Persist to Supabase DB in background (wipe and insert fresh tiles, with direct update fallback)
       try {
         supabase
           .from('brain_tiles')
@@ -382,7 +385,24 @@ export default function BrainGridGame() {
                   .update({ current_target: 1 })
                   .eq('id', 1)
                   .then(() => {});
-              });
+              })
+              .catch(e => console.warn("Background insert failed", e));
+          })
+          .catch(e => {
+            // Failsafe: if delete fails, clear owners on the existing rows instead of recreating them
+            console.warn("Delete failed, running direct owner clear update instead", e);
+            supabase
+              .from('brain_tiles')
+              .update({ owner_name: null, owner_color: null })
+              .neq('id', 0)
+              .then(() => {
+                supabase
+                  .from('brain_game')
+                  .update({ current_target: 1 })
+                  .eq('id', 1)
+                  .then(() => {});
+              })
+              .catch(err => console.warn("Failsafe update failed", err));
           });
       } catch (dbErr) {
         console.warn("Could not reset DB game state in background", dbErr);
