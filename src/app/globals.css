@@ -18,4 +18,17 @@ body {
   font-family: var(--font-sans), sans-serif;
 }
 
-
+/* Custom scrollbar for WebSocket console and log container */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #bbada0;
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #a08c75;
+}
