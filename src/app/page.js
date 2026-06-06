@@ -66,13 +66,13 @@ export default function BrainGridGame() {
         .single();
 
       if (tilesErr || gameErr || !tilesData) {
-        return false;
+        return null;
       }
       setTiles(tilesData);
       setGameState(gameData);
-      return true;
+      return { tiles: tilesData, game: gameData };
     } catch (e) {
-      return false;
+      return null;
     }
   };
 
@@ -94,9 +94,16 @@ export default function BrainGridGame() {
 
     const initGameBoard = async () => {
       // 1. Try to load from Supabase DB
-      const success = await pullInitialMatchData();
-      if (success) {
-        logWs('SYSTEM', 'db_sync_ok', { tilesCount: 100 });
+      const dbData = await pullInitialMatchData();
+      if (dbData) {
+        logWs('SYSTEM', 'db_sync_ok', { tilesCount: dbData.tiles.length });
+        
+        // If the database game is already finished (target > number of tiles), immediately start a fresh game
+        const isDbGameFinished = dbData.tiles.length > 0 && dbData.game.current_target > dbData.tiles.length;
+        if (isDbGameFinished) {
+          logWs('SYSTEM', 'db_game_finished_auto_reset', { info: 'Last database game was completed, starting new game' });
+          await handleStartFreshGame();
+        }
         return;
       }
 
@@ -171,8 +178,14 @@ export default function BrainGridGame() {
           });
         }
       } else if (event === 'sync-response') {
-        setTiles(payload.tiles);
-        setGameState({ current_target: payload.current_target });
+        const isResponseFinished = payload.tiles.length > 0 && payload.current_target > payload.tiles.length;
+        if (isResponseFinished) {
+          logWs('SYSTEM', 'sync_game_finished_auto_reset', { info: 'Synced game was completed, starting new game' });
+          handleStartFreshGame();
+        } else {
+          setTiles(payload.tiles);
+          setGameState({ current_target: payload.current_target });
+        }
       } else if (event === 'tile-selected') {
         setTiles((prev) =>
           prev.map((t) =>
@@ -283,6 +296,23 @@ export default function BrainGridGame() {
         next_target: nextTargetValue,
       });
     }
+
+    // Persist to Supabase DB in background (ignore errors)
+    try {
+      supabase
+        .from('brain_tiles')
+        .update({ owner_name: user.name, owner_color: user.color })
+        .eq('id', tile.id)
+        .then(() => {});
+
+      supabase
+        .from('brain_game')
+        .update({ current_target: nextTargetValue })
+        .eq('id', 1)
+        .then(() => {});
+    } catch (e) {
+      console.warn("Could not persist tile claim to DB in background", e);
+    }
   };
 
   // Start fresh game synchronized via WebSockets
@@ -303,14 +333,20 @@ export default function BrainGridGame() {
             expr = `${v - r} + ${r}`;
           }
         }
-        freshTiles.push({ id: v, value: v, expression: expr, owner_name: null, owner_color: null });
+        freshTiles.push({ value: v, expression: expr, owner_name: null, owner_color: null });
       }
 
-      // Shuffle
+      // Shuffle and map to ID-matching shape
       const shuffledTiles = freshTiles
         .map((value) => ({ value, sort: Math.random() }))
         .sort((a, b) => a.sort - b.sort)
-        .map(({ value }) => value);
+        .map(({ value }, index) => ({
+          id: index + 1,
+          value: value.value,
+          expression: value.expression,
+          owner_name: null,
+          owner_color: null
+        }));
 
       setTiles(shuffledTiles);
       setGameState({ current_target: 1 });
@@ -321,6 +357,22 @@ export default function BrainGridGame() {
         window.__gameChannelSend('new-game', {
           tiles: shuffledTiles,
         });
+      }
+
+      // Persist to Supabase DB in background (upsert rows 1..100)
+      try {
+        supabase
+          .from('brain_tiles')
+          .upsert(shuffledTiles)
+          .then(() => {
+            supabase
+              .from('brain_game')
+              .update({ current_target: 1 })
+              .eq('id', 1)
+              .then(() => {});
+          });
+      } catch (dbErr) {
+        console.warn("Could not reset DB game state in background", dbErr);
       }
     } catch (e) {
       console.error(e);
