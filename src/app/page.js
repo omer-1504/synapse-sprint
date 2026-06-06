@@ -189,7 +189,7 @@ export default function BrainGridGame() {
       } else if (event === 'tile-selected') {
         setTiles((prev) =>
           prev.map((t) =>
-            t.id === payload.tileId
+            t.value === payload.tileValue
               ? { ...t, owner_name: payload.owner_name, owner_color: payload.owner_color }
               : t
           )
@@ -281,7 +281,7 @@ export default function BrainGridGame() {
     // Apply change locally
     setTiles((prev) =>
       prev.map((t) =>
-        t.id === tile.id ? { ...t, owner_name: user.name, owner_color: user.color } : t
+        t.value === tile.value ? { ...t, owner_name: user.name, owner_color: user.color } : t
       )
     );
     setGameState({ current_target: nextTargetValue });
@@ -290,7 +290,7 @@ export default function BrainGridGame() {
     // Sync via WebSockets
     if (window.__gameChannelSend) {
       window.__gameChannelSend('tile-selected', {
-        tileId: tile.id,
+        tileValue: tile.value,
         owner_name: user.name,
         owner_color: user.color,
         next_target: nextTargetValue,
@@ -336,7 +336,7 @@ export default function BrainGridGame() {
         freshTiles.push({ value: v, expression: expr, owner_name: null, owner_color: null });
       }
 
-      // Shuffle and map to ID-matching shape
+      // Shuffle and map to local shape with local IDs
       const shuffledTiles = freshTiles
         .map((value) => ({ value, sort: Math.random() }))
         .sort((a, b) => a.sort - b.sort)
@@ -359,17 +359,30 @@ export default function BrainGridGame() {
         });
       }
 
-      // Persist to Supabase DB in background (upsert rows 1..100)
+      // Persist to Supabase DB in background (wipe and insert fresh tiles)
       try {
         supabase
           .from('brain_tiles')
-          .upsert(shuffledTiles)
+          .delete()
+          .neq('id', 0)
           .then(() => {
+            const dbTiles = shuffledTiles.map(t => ({
+              value: t.value,
+              expression: t.expression,
+              owner_name: null,
+              owner_color: null
+            }));
+
             supabase
-              .from('brain_game')
-              .update({ current_target: 1 })
-              .eq('id', 1)
-              .then(() => {});
+              .from('brain_tiles')
+              .insert(dbTiles)
+              .then(() => {
+                supabase
+                  .from('brain_game')
+                  .update({ current_target: 1 })
+                  .eq('id', 1)
+                  .then(() => {});
+              });
           });
       } catch (dbErr) {
         console.warn("Could not reset DB game state in background", dbErr);
